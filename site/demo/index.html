@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VulnServer — Demo en el navegador</title>
+<meta name="description" content="Simulación educativa del laboratorio VulnServer: terminal en el navegador con los tres escenarios de escalada, flags, auditoría y hardening. No es una VM real.">
+<meta name="color-scheme" content="dark">
+<link rel="stylesheet" href="demo.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>">
+</head>
+<body>
+
+<header class="top">
+  <a class="back" href="../">← VulnServer</a>
+  <h1>Demo en el navegador</h1>
+  <p class="tag">Simulación educativa · no es la VM real</p>
+</header>
+
+<div class="notice" role="note">
+  <strong>Esto es una simulación, no el laboratorio.</strong>
+  Reproduce el comportamiento de los scripts y permisos para practicar el flujo, pero no ejecuta
+  un kernel real: UFW, auditd, Docker, SSH y systemd no están presentes. El laboratorio de verdad
+  se instala en una VM de Ubuntu Server 24.04 (ver <a href="../#instalacion">instalación</a>).
+  Las credenciales son las mismas que documenta el proyecto y la sesión se reinicia al recargar.
+</div>
+
+<main class="layout">
+
+  <section class="term-wrap" aria-label="Terminal del laboratorio simulado">
+    <div class="term-bar">
+      <span class="dot d1"></span><span class="dot d2"></span><span class="dot d3"></span>
+      <span class="term-title" id="term-title">labuser@vulnserver</span>
+      <span class="term-tools">
+        <button type="button" id="btn-help" class="mini">ayuda</button>
+        <button type="button" id="btn-clear" class="mini">limpiar</button>
+      </span>
+    </div>
+    <div id="screen" class="screen" tabindex="0" role="log" aria-live="polite" aria-label="Salida de la terminal"></div>
+    <form id="form" class="input-row" autocomplete="off">
+      <label class="prompt" id="prompt" for="cmd">labuser@vulnserver:~$</label>
+      <input id="cmd" name="cmd" type="text" spellcheck="false" autocapitalize="off"
+             autocorrect="off" aria-label="Escribe un comando" placeholder="escribe «help»">
+    </form>
+  </section>
+
+  <aside class="panel" aria-label="Estado del laboratorio">
+    <div class="card">
+      <h2>Tu sesión</h2>
+      <p class="who">Usuario: <b id="p-user">labuser</b></p>
+      <div class="switch" role="group" aria-label="Cambiar de cuenta">
+        <button type="button" class="mini" data-user="labuser">labuser</button>
+        <button type="button" class="mini" data-user="adminlab">adminlab</button>
+        <button type="button" class="mini" data-user="root">root</button>
+      </div>
+      <p class="hint">En el laboratorio real solo el propietario usa <code>adminlab</code>; <code>root</code> se alcanza explotando un escenario.</p>
+    </div>
+
+    <div class="card">
+      <h2>Objetivos</h2>
+      <ul class="flags" id="flag-list">
+        <li data-flag="user"><span class="lock">🔒</span> <b>USER</b> <code>/opt/vulnserver/flags/user.txt</code></li>
+        <li data-flag="privilege"><span class="lock">🔒</span> <b>PRIVILEGE</b> <code>/opt/vulnserver/flags/privilege.txt</code></li>
+        <li data-flag="root"><span class="lock">🔒</span> <b>ROOT</b> <code>/opt/vulnserver/flags/root.txt</code></li>
+      </ul>
+      <p class="hint" id="progress">0 de 3 flags</p>
+    </div>
+
+    <div class="card">
+      <h2>Escenarios</h2>
+      <ul class="chips" id="scenario-list">
+        <li data-scenario="a"><b>A</b> SUID en <code>find</code></li>
+        <li data-scenario="b"><b>B</b> delegación de sudo</li>
+        <li data-scenario="c"><b>C</b> cron de root</li>
+      </ul>
+      <p class="hint" id="harden-state">sin endurecer</p>
+    </div>
+
+    <div class="card">
+      <h2>Atajos</h2>
+      <pre class="cheat">help                 comandos disponibles
+ls -l /opt/vulnserver
+id ; sudo -l
+cat /opt/vulnserver/flags/user.txt
+sudo ./audit.sh
+sudo ./harden.sh --apply
+./reset-lab.sh --yes</pre>
+      <button type="button" id="btn-reset" class="danger">Reiniciar simulación</button>
+    </div>
+  </aside>
+
+</main>
+
+<footer class="foot">
+  <p>Simulación escrita en JavaScript sin dependencias. El laboratorio real está en
+  <a href="https://github.com/rgomez31UAQ/vulnserver-lab">GitHub</a> y su guía completa en
+  <a href="../#docs">la documentación</a>.</p>
+</footer>
+
+<script src="demo.js"></script>
+</body>
+</html>

@@ -1,63 +1,65 @@
-# Troubleshooting
+# Solución de problemas
 
 ## SSH
 
-**Connection refused**
+**Conexión rechazada**
 ```bash
 sudo systemctl status ssh
-sudo sshd -t                 # syntax error in a drop-in?
+sudo sshd -t                 # ¿error de sintaxis en algún drop-in?
 sudo ss -ltnp | grep :22
-sudo ufw status              # is your source network allowed?
+sudo ufw status              # ¿está permitida tu red de origen?
 ```
-If a drop-in broke sshd, remove it and reload:
+Si un drop-in rompió sshd, elimínalo y recarga:
 `sudo rm /etc/ssh/sshd_config.d/99-vulnserver.conf && sudo systemctl restart ssh`.
 
 **Permission denied (publickey,password)**
-`AllowUsers` only permits `adminlab` and `labuser`. Confirm the account:
-`sudo ./scripts/users/create_users.sh status`, then reset the lab password:
-`sudo passwd labuser`.
+`AllowUsers` solo permite a `adminlab` y `labuser`. Confirma la cuenta:
+`sudo ./scripts/users/create_users.sh status`, y luego restablece la contraseña
+del laboratorio: `sudo passwd labuser`.
 
-**Locked out after hardening**
-Use the hypervisor console, then:
+**Quedaste fuera después del hardening**
+Usa la consola del hipervisor y luego:
 ```bash
 sudo rm -f /etc/ssh/sshd_config.d/99-vulnserver.conf
 sudo systemctl restart ssh
 ```
-This is why `harden.sh` asks before disabling password authentication.
+Por esto `harden.sh` pregunta antes de deshabilitar la autenticación por
+contraseña.
 
-## Accounts
+## Cuentas
 
 **`useradd: group labpriv exists`**
-Fixed in `scripts/users/create_users.sh` (the group is created first and reused).
-If you see it on an older copy, run `sudo ./scripts/users/create_users.sh create`
-again after updating.
+Corregido en `scripts/users/create_users.sh` (el grupo se crea primero y se
+reutiliza). Si lo ves en una copia anterior, ejecuta
+`sudo ./scripts/users/create_users.sh create` de nuevo después de actualizar.
 
-**`labpriv` can log in**
+**`labpriv` puede iniciar sesión**
 ```bash
 sudo passwd -l labpriv
 sudo usermod --password '!' labpriv
-passwd -S labpriv        # must start with L
+passwd -S labpriv        # debe empezar con L
 ```
 
 ## Flags
 
-**Flags missing after install**
+**Faltan las flags después de instalar**
 ```bash
 sudo ./scripts/flags/generate_flags.sh generate --force
 sudo ./scripts/flags/generate_flags.sh verify
 ```
 
-**A student can read `root.txt`**
-The permission model is broken. `sudo ./scripts/flags/generate_flags.sh verify`
-shows the drift; fix with `sudo ./harden.sh --apply --only permissions`. Also
-check for copies: `sudo grep -r 'VS{' /home /tmp /opt/vulnserver/lab 2>/dev/null`.
-`reset-lab.sh` rotates the values, so leaked copies become useless.
+**Un estudiante puede leer `root.txt`**
+El modelo de permisos está roto. `sudo ./scripts/flags/generate_flags.sh verify`
+muestra la desviación; corrígela con
+`sudo ./harden.sh --apply --only permissions`. Revisa también si hay copias:
+`sudo grep -r 'VS{' /home /tmp /opt/vulnserver/lab 2>/dev/null`. `reset-lab.sh`
+rota los valores, así que las copias filtradas dejan de servir.
 
-**Flags tracked by git**
+**Flags rastreadas por git**
 ```bash
 git rm --cached flags/user.txt flags/privilege.txt flags/root.txt
 ```
-`.gitignore` already excludes the directory; never commit generated flags.
+`.gitignore` ya excluye el directorio; nunca hagas commit de flags generadas.
 
 ## Docker / Juice Shop
 
@@ -68,125 +70,130 @@ sudo systemctl enable --now docker
 sudo docker info
 ```
 
-**Port already in use**
+**Puerto ya en uso**
 ```bash
 sudo ss -ltnp | grep :3000
-sudo JUICE_SHOP_PORT=3001 ./install.sh --no-firewall   # or stop the other service
+sudo JUICE_SHOP_PORT=3001 ./install.sh --no-firewall   # o detén el otro servicio
 ```
 
-**Container starts then exits**
+**El contenedor arranca y se apaga**
 ```bash
 cd /opt/vulnserver/web
 sudo docker compose logs --tail 100 juice-shop
 sudo docker compose ps
 ```
-Low memory is the usual cause on a 1 GB VM; give the VM 2 GB or lower
-`JUICE_SHOP_MEMORY_LIMIT` to `768m`.
+La causa habitual es poca memoria en una VM de 1 GB; dale 2 GB a la VM o baja
+`JUICE_SHOP_MEMORY_LIMIT` a `768m`.
 
-**Health check stays `starting`**
-The image is shell-less and keeps Node at `/nodejs/bin/node`. The compose file
-uses that absolute path; if you edited it to `node`, the exec fails with
-`executable file not found in $PATH`. Restore the shipped file and recreate:
+**El health check se queda en `starting`**
+La imagen no trae shell y mantiene Node en `/nodejs/bin/node`. El archivo compose
+usa esa ruta absoluta; si lo editaste a `node`, el exec falla con
+`executable file not found in $PATH`. Restaura el archivo original y recrea:
 `sudo docker compose up -d --force-recreate`.
 
-**Juice Shop unreachable from the participant**
-Check the publish address and the firewall:
-`docker port vulnserver-juice-shop`, `sudo ufw status verbose`, and
-`LAB_BIND_ADDR` in `/opt/vulnserver/web/.env`.
+**Juice Shop no es accesible desde el participante**
+Revisa la dirección de publicación y el firewall:
+`docker port vulnserver-juice-shop`, `sudo ufw status verbose` y `LAB_BIND_ADDR`
+en `/opt/vulnserver/web/.env`.
 
-**`docker compose` not found**
-Ubuntu's package is `docker-compose-v2`; the binary is `docker compose` (plugin).
-Older hosts need `docker-compose` (v1) — install `docker-compose-v2` instead.
+**`docker compose` no encontrado**
+El paquete de Ubuntu es `docker-compose-v2`; el binario es `docker compose`
+(complemento). Los hosts más viejos necesitan `docker-compose` (v1) — instala
+`docker-compose-v2` en su lugar.
 
-## Scenarios
+## Escenarios
 
-**Scenario B will not activate**
+**El Escenario B no se activa**
 ```bash
 id labpriv; getent group labpriv
 command -v visudo
 sudo visudo -cf /etc/sudoers.d/vulnserver-lab-b
 ```
-The activation validates the file before installing it; a validation failure
-aborts without touching the host policy.
+La activación valida el archivo antes de instalarlo; si la validación falla, se
+aborta sin tocar la política del host.
 
-**Sudo says "no new privileges" or ignores the rule**
-Check file mode (`0440`) and that the filename has no dot:
-`/etc/sudoers.d/vulnserver-lab-b` is valid; `...lab-b.conf` is ignored.
+**sudo dice "no new privileges" o ignora la regla**
+Revisa el modo del archivo (`0440`) y que el nombre no tenga punto:
+`/etc/sudoers.d/vulnserver-lab-b` es válido; `...lab-b.conf` se ignora.
 
-**Scenario C does nothing**
+**El Escenario C no hace nada**
 ```bash
 systemctl status cron
 sudo cat /etc/cron.d/vulnserver-lab-c
 sudo tail -50 /var/log/syslog | grep CRON
 ```
-Cron runs the job at the top of each minute; wait up to 60 seconds. A replaced
-script must be executable and readable by root.
+Cron ejecuta la tarea al inicio de cada minuto; espera hasta 60 segundos. El
+script reemplazado debe ser ejecutable y legible por root.
 
-**`verify` returns 1 but the lab looks active**
-`verify` checks the *vulnerability*, not the state file. A `FAIL` means the
-vulnerability is gone (for example after hardening) — that is expected after
-remediation.
+**`verify` devuelve 1 pero el laboratorio parece activo**
+`verify` revisa la *vulnerabilidad*, no el archivo de estado. Un `FAIL` significa
+que la vulnerabilidad ya no está (por ejemplo después del hardening) — eso es lo
+esperado tras la remediación.
 
 ## Firewall
 
-**UFW refuses to enable / locks out SSH**
-Always allow SSH from your management network **before** enabling:
+**UFW no se deja habilitar / te deja fuera de SSH**
+Permite siempre SSH desde tu red de administración **antes** de habilitar:
 ```bash
 sudo ufw allow from 192.168.56.0/24 to any port 22 proto tcp
 sudo ufw --force enable
 ```
-If you lose access, use the hypervisor console: `sudo ufw disable`.
+Si pierdes el acceso, usa la consola del hipervisor: `sudo ufw disable`.
 
-**Docker bypasses UFW**
-Docker inserts its own iptables rules; a published port can be reachable even if
-UFW denies it. Publish on a specific address (`LAB_BIND_ADDR`) and rely on the
-provider/hypervisor firewall as well. Never publish on `0.0.0.0` on a host with a
-public interface.
+**Docker se salta UFW**
+Docker inserta sus propias reglas de iptables; un puerto publicado puede ser
+alcanzable aunque UFW lo niegue. Publica en una dirección específica
+(`LAB_BIND_ADDR`) y apóyate también en el firewall del proveedor o del
+hipervisor. Nunca publiques en `0.0.0.0` en un host con interfaz pública.
 
 ## auditd
 
 **`auditctl: command not found`**
 `sudo apt install -y auditd audispd-plugins`.
 
-**Rules do not survive reboot**
-Ubuntu loads `/etc/audit/rules.d/*.rules` via `augenrules`; ensure the file is
-`0640 root:root` and run `sudo augenrules --load`. Check `sudo auditctl -l`.
+**Las reglas no sobreviven al reinicio**
+Ubuntu carga `/etc/audit/rules.d/*.rules` mediante `augenrules`; asegúrate de que
+el archivo sea `0640 root:root` y ejecuta `sudo augenrules --load`. Revisa con
+`sudo auditctl -l`.
 
-**`ausearch` returns nothing**
-Give it a key and a window: `sudo ausearch -k vulnserver_flags -ts today`.
-Nothing is logged until the audited path is touched.
+**`ausearch` no devuelve nada**
+Dale una clave y una ventana: `sudo ausearch -k vulnserver_flags -ts today`. No
+se registra nada hasta que se toca la ruta auditada.
 
 ## Logs
 
-**`events.log` not updating**
-The log directory is root-only. Run the tools with `sudo`. If the directory was
-deleted, recreate it: `sudo ./scripts/permissions/apply_permissions.sh base`.
+**`events.log` no se actualiza**
+El directorio de logs es solo de root. Ejecuta las herramientas con `sudo`. Si el
+directorio se borró, vuelve a crearlo:
+`sudo ./scripts/permissions/apply_permissions.sh base`.
 
-**Need to prove logs were not modified**
+**Necesitas probar que los logs no fueron modificados**
 ```bash
 sudo chattr +a /opt/vulnserver/logs/events.log
 lsattr /opt/vulnserver/logs/events.log
 sha256sum /opt/vulnserver/logs/events.log | tee /root/events.sha256
 ```
-Copy archives off-host after each group.
+Copia los archivos fuera del host después de cada grupo.
 
-## Tests
+## Pruebas
 
-**Container test suite fails at install**
-The suite runs `install.sh --profile container`, which skips Docker, UFW, auditd
-and SSH. A failure there is a real script bug: read
-`reports/test-run-<ts>.log` and `/tmp/install.log` printed in the failure block.
+**La suite de contenedor falla en la instalación**
+La suite ejecuta `install.sh --profile container`, que omite Docker, UFW, auditd
+y SSH. Un fallo ahí es un bug real del script: revisa
+`reports/test-run-<ts>.log` y `/tmp/install.log`, que se imprimen en el bloque de
+error.
 
-**`docker: permission denied` on the test runner**
-The runner needs access to the Docker daemon (root or the `docker` group). It does
-not need `sudo` for anything else.
+**`docker: permission denied` en el runner de pruebas**
+El runner necesita acceso al daemon de Docker (root o el grupo `docker`). No
+necesita `sudo` para nada más.
 
-## Full reset
+## Reinicio completo
 
 ```bash
-sudo ./reset-lab.sh --yes          # state, flags, practice data
-sudo ./uninstall.sh --yes --purge  # remove everything (keeps adminlab)
+sudo ./reset-lab.sh --yes          # estado, flags, datos de práctica
+sudo ./uninstall.sh --yes --purge  # elimina todo (conserva adminlab)
 sudo ./install.sh --install-deps --activate a,b,c
 ```
 
-If even that fails, restore the hypervisor snapshot `vulnserver-clean`.
+Si incluso eso falla, restaura la instantánea del hipervisor
+`vulnserver-clean`.

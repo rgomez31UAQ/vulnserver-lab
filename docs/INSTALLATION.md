@@ -1,114 +1,115 @@
-# Installation
+# Instalación
 
-This guide deploys VulnServer on **Ubuntu Server 24.04 LTS**. The project is a
-server lab, not a hosted web service: it needs root, real accounts, SSH, cron and
-Docker. Install it on a VM you can destroy.
+Esta guía despliega VulnServer en **Ubuntu Server 24.04 LTS**. El proyecto es un
+laboratorio de servidor, no un servicio web alojado: necesita root, cuentas
+reales, SSH, cron y Docker. Instálalo en una VM que puedas destruir.
 
-## 1. Choose the platform
+## 1. Elige la plataforma
 
-| Platform | Suitable | Notes |
+| Plataforma | Adecuada | Notas |
 |---|---|---|
-| QEMU/KVM + Virtual Machine Manager | yes | recommended; snapshots are the fastest rollback |
-| Proxmox / VMware / Hyper-V | yes | use a NAT or host-only network |
-| Docker on a Linux host | limited | `--profile container` for CI only; no SSH/UFW/auditd |
-| Cloud VPS | yes, with care | see [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md) |
-| Shared or production host | **no** | the lab grants root by design |
+| QEMU/KVM + Virtual Machine Manager | sí | recomendada; las instantáneas son el rollback más rápido |
+| Proxmox / VMware / Hyper-V | sí | usa una red NAT o host-only |
+| Docker sobre un host Linux | limitado | `--profile container` solo para CI; sin SSH/UFW/auditd |
+| VPS en la nube | sí, con cuidado | consulta [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md) |
+| Host compartido o de producción | **no** | el laboratorio entrega root por diseño |
 
-Minimum resources: 2 vCPU, 2 GB RAM, 20 GB disk (25 GB recommended with the
-Juice Shop image).
+Recursos mínimos: 2 vCPU, 2 GB de RAM, 20 GB de disco (se recomiendan 25 GB con
+la imagen de Juice Shop).
 
-## 2. Prepare an isolated network
+## 2. Prepara una red aislada
 
-1. Hypervisor network: **NAT** or **host-only**, not bridged to a network with
-   other people's machines.
-2. Note the lab subnet, e.g. `192.168.56.0/24`.
-3. Keep a second management path (hypervisor console) so a firewall mistake
-   cannot lock you out.
+1. Red del hipervisor: **NAT** o **host-only**, no en puente hacia una red con
+   equipos de otras personas.
+2. Anota la subred del laboratorio, por ejemplo `192.168.56.0/24`.
+3. Conserva una segunda vía de administración (la consola del hipervisor) para que
+   un error de firewall no te deje fuera.
 
-## 3. Install Ubuntu Server 24.04
+## 3. Instala Ubuntu Server 24.04
 
-- Architecture: amd64 (arm64 works, QEMU/KVM on Apple Silicon needs UEFI).
-- Create the owner account, e.g. `adminlab`, with your SSH public key.
-- Do **not** install a desktop environment; the lab is a server.
-- Enable OpenSSH server during installation.
-- After first boot:
+- Arquitectura: amd64 (arm64 funciona; QEMU/KVM en Apple Silicon requiere UEFI).
+- Crea la cuenta del propietario, por ejemplo `adminlab`, con tu llave pública
+  SSH.
+- **No** instales un entorno de escritorio; el laboratorio es un servidor.
+- Habilita el servidor OpenSSH durante la instalación.
+- Después del primer arranque:
 
 ```bash
 sudo apt update && sudo apt upgrade -y
-sudo timedatectl set-timezone UTC     # consistent evidence timestamps
+sudo timedatectl set-timezone UTC     # marcas de tiempo de evidencia consistentes
 ```
 
-## 4. Get the project onto the server
+## 4. Lleva el proyecto al servidor
 
 ```bash
 sudo apt install -y git
-git clone <your-fork-url> ~/vulnserver
+git clone <url-de-tu-fork> ~/vulnserver
 cd ~/vulnserver
 ```
 
-Or copy the directory with `scp -r ./vulnserver adminlab@192.168.56.10:/home/adminlab/`.
+O copia el directorio con `scp -r ./vulnserver adminlab@192.168.56.10:/home/adminlab/`.
 
-## 5. Review the configuration
+## 5. Revisa la configuración
 
-Open `config/lab.conf`. The values you will most likely change:
+Abre `config/lab.conf`. Los valores que más probablemente cambies:
 
-| Variable | Default | Meaning |
+| Variable | Valor por omisión | Significado |
 |---|---|---|
-| `SSH_ALLOWED_NETS` | `192.168.56.0/24 10.10.0.0/24` | who may reach SSH |
-| `LAB_ALLOWED_NETS` | same | who may reach Juice Shop |
-| `JUICE_SHOP_PORT` | `3000` | published web port |
-| `LAB_BIND_ADDR` | `0.0.0.0` | publication address (firewall restricts it) |
-| `LAB_USER_PASSWORD` | `LabUser!2026` | lab-only password shared with the partner |
-| `ADMIN_USER_PASSWORD` | `AdminLab!2026` | owner account (change it!) |
+| `SSH_ALLOWED_NETS` | `192.168.56.0/24 10.10.0.0/24` | quién puede llegar a SSH |
+| `LAB_ALLOWED_NETS` | el mismo | quién puede llegar a Juice Shop |
+| `JUICE_SHOP_PORT` | `3000` | puerto web publicado |
+| `LAB_BIND_ADDR` | `0.0.0.0` | dirección de publicación (el firewall la restringe) |
+| `LAB_USER_PASSWORD` | `LabUser!2026` | contraseña solo del laboratorio, compartida con el compañero |
+| `ADMIN_USER_PASSWORD` | `AdminLab!2026` | cuenta del propietario (¡cámbiala!) |
 
-All values can be overridden per run without editing the file:
+Todos los valores se pueden sobrescribir por ejecución sin editar el archivo:
 
 ```bash
 sudo SSH_ALLOWED_NETS="192.168.56.0/24" JUICE_SHOP_PORT=3000 ./install.sh
 ```
 
-## 6. Run the installer
+## 6. Ejecuta el instalador
 
 ```bash
 sudo ./install.sh --install-deps --activate a,b,c
 ```
 
-What it does, in order:
+Qué hace, en orden:
 
-1. verifies the OS, port and required base tools;
-2. installs missing packages (`jq`, `curl`, `cron`, `sudo`, `ufw`, `auditd`,
-   `docker.io`, `docker-compose-v2`) when `--install-deps` is given;
-3. creates `/opt/vulnserver/{bin,flags,logs,backups,reports,state,lab,web}` and
-   applies the baseline permission model;
-4. creates `adminlab` (sudo), `labuser` (unprivileged) and `labpriv`
-   (intermediate, locked password);
-5. installs the baseline sudo policy (labuser has no root rights);
-6. generates the three flags with random identifiers;
-7. installs the sshd drop-in (root login disabled) and validates it with
-   `sshd -t` before reloading;
-8. installs Docker if needed and starts Juice Shop via `docker compose`;
-9. applies UFW rules and the auditd rule set;
-10. activates the requested scenarios.
+1. verifica el sistema operativo, el puerto y las herramientas base necesarias;
+2. instala los paquetes faltantes (`jq`, `curl`, `cron`, `sudo`, `ufw`, `auditd`,
+   `docker.io`, `docker-compose-v2`) cuando se pasa `--install-deps`;
+3. crea `/opt/vulnserver/{bin,flags,logs,backups,reports,state,lab,web}` y aplica
+   el modelo base de permisos;
+4. crea `adminlab` (sudo), `labuser` (sin privilegios) y `labpriv` (intermedia,
+   contraseña bloqueada);
+5. instala la política base de sudo (labuser no tiene derechos de root);
+6. genera las tres flags con identificadores aleatorios;
+7. instala el drop-in de sshd (login de root deshabilitado) y lo valida con
+   `sshd -t` antes de recargar;
+8. instala Docker si hace falta y arranca Juice Shop con `docker compose`;
+9. aplica las reglas de UFW y el conjunto de reglas de auditd;
+10. activa los escenarios solicitados.
 
-Useful flags:
+Opciones útiles:
 
 ```
---install-deps     install missing packages automatically
---activate a,b,c   activate scenarios after installation
---no-docker        skip Docker and Juice Shop
---no-firewall      do not touch UFW (e.g. behind an external firewall)
---no-auditd        skip auditd rules
---no-ssh           do not modify sshd
---port N           Juice Shop port
---profile container restricted profile for CI/testing
---skip-os-check    allow non-Ubuntu hosts (disposable VMs only)
--y                 non-interactive
--n                 dry run
+--install-deps     instala los paquetes faltantes automáticamente
+--activate a,b,c   activa escenarios después de la instalación
+--no-docker        omite Docker y Juice Shop
+--no-firewall      no toca UFW (por ejemplo, detrás de un firewall externo)
+--no-auditd        omite las reglas de auditd
+--no-ssh           no modifica sshd
+--port N           puerto de Juice Shop
+--profile container perfil restringido para CI/pruebas
+--skip-os-check    permite hosts que no son Ubuntu (solo VMs desechables)
+-y                 sin interacción
+-n                 simulación (dry run)
 ```
 
-Every run appends to `/opt/vulnserver/logs/events.log`.
+Cada ejecución agrega líneas a `/opt/vulnserver/logs/events.log`.
 
-## 7. Verify the installation
+## 7. Verifica la instalación
 
 ```bash
 sudo ./lab-manager.sh status
@@ -117,42 +118,43 @@ sudo ./scripts/flags/generate_flags.sh verify
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/
 ```
 
-Expected: three accounts, three flags with the documented ownership, Juice Shop
-`HTTP 200`, audit report produced.
+Se espera: tres cuentas, tres flags con la propiedad documentada, Juice Shop con
+`HTTP 200` y el reporte de auditoría generado.
 
-## 8. Test the login path as the participant
+## 8. Prueba la ruta de acceso como participante
 
-From another machine on the allowed network:
+Desde otra máquina en la red permitida:
 
 ```bash
-ssh labuser@192.168.56.10        # password: LabUser!2026
+ssh labuser@192.168.56.10        # contraseña: LabUser!2026
 cat /opt/vulnserver/flags/user.txt
-sudo -n true; echo "sudo exit: $?"   # must fail
+sudo -n true; echo "salida de sudo: $?"   # debe fallar
 ```
 
-If SSH refuses the connection, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
-Never share `adminlab` credentials with the participant.
+Si SSH rechaza la conexión, consulta [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+Nunca compartas las credenciales de `adminlab` con el participante.
 
-## 9. Hand over the participant material
+## 9. Entrega el material del participante
 
-Give the participant `docs/ATTACKER_GUIDE.md` **only**. It contains the scope,
-the flags to collect and the report template, and no solutions. Keep
-`docs/INSTRUCTOR_SOLUTIONS.md` for yourself.
+Dale al participante **solo** `docs/ATTACKER_GUIDE.md`. Contiene el alcance, las
+flags que debe recolectar y la plantilla de reporte, y ninguna solución. Guarda
+`docs/INSTRUCTOR_SOLUTIONS.md` para ti.
 
-## 10. Snapshot
+## 10. Instantánea
 
-Before the exercise, take a hypervisor snapshot (`vulnserver-clean`). Restore it
-between groups instead of reinstalling. If snapshots are unavailable:
+Antes del ejercicio, toma una instantánea del hipervisor (`vulnserver-clean`).
+Restáurala entre grupos en lugar de reinstalar. Si no hay instantáneas
+disponibles:
 
 ```bash
 sudo ./reset-lab.sh --yes
 ```
 
-## Uninstallation
+## Desinstalación
 
 ```bash
-sudo ./uninstall.sh            # stops services, keeps logs/flags/backups
-sudo ./uninstall.sh --purge    # also deletes the state directory
+sudo ./uninstall.sh            # detiene servicios, conserva logs/flags/backups
+sudo ./uninstall.sh --purge    # además borra el directorio de estado
 ```
 
-`adminlab` is always kept so you never lose the recovery account.
+`adminlab` siempre se conserva para que nunca pierdas la cuenta de recuperación.

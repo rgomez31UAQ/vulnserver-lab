@@ -1,109 +1,120 @@
-# VulnServer — Ubuntu Hardening & Privilege Escalation Lab v1.0
+# VulnServer — Laboratorio de hardening y escalada de privilegios en Ubuntu v1.0
 
-A reproducible, deliberately vulnerable Ubuntu Server 24.04 laboratory for a
-university **server hardening** exercise. One student owns and hardens the
-server; a second authorized student attacks it; both document the result.
+Un laboratorio reproducible sobre Ubuntu Server 24.04, deliberadamente
+vulnerable, para un ejercicio universitario de **hardening de servidores**. Un
+estudiante es dueño del servidor y lo endurece; un segundo estudiante autorizado
+lo ataca; ambos documentan el resultado.
 
-Project site: <https://rgomez31UAQ.github.io/vulnserver-lab/> (Spanish, static —
-GitHub Pages presents the lab, it cannot host the vulnerable server).
+Sitio del proyecto: <https://rgomez31UAQ.github.io/vulnserver-lab/> (en español,
+estático — GitHub Pages presenta el laboratorio, no puede alojar el servidor
+vulnerable). Incluye una [demo en el navegador](site/demo/index.html) que simula
+las cuentas, los permisos y los tres escenarios para practicar el flujo; es una
+simulación en JavaScript, no una VM.
 
-> **Authorized, isolated use only.** VulnServer creates a SUID root binary, an
-> over-broad sudo policy and a root cron job executing a user-writable script.
-> Anyone with local access can become root. Run it only on a disposable VM or a
-> dedicated lab host that nobody else uses, on a private network.
+> **Solo para uso autorizado y aislado.** VulnServer crea un binario SUID de root,
+> una política de sudo demasiado amplia y un cron de root que ejecuta un script
+> escribible por el usuario. Cualquiera con acceso local puede convertirse en
+> root. Ejecútalo únicamente en una VM desechable o en un host de laboratorio
+> dedicado que nadie más use, y en una red privada.
 
 | | |
 |---|---|
-| Target OS | Ubuntu Server 24.04 LTS (amd64; arm64 supported) |
-| Host footprint | 2 vCPU, 2–4 GB RAM, 20–25 GB disk |
-| Web application | OWASP Juice Shop (pinned Docker image) |
-| Scenarios | A: file permissions · B: sudo · C: cron |
-| Tooling | Bash only (no Python runtime dependency) |
-| Validation | 80/80 functional tests PASS in a clean Ubuntu 24.04 container |
+| Sistema objetivo | Ubuntu Server 24.04 LTS (amd64; arm64 compatible) |
+| Recursos del host | 2 vCPU, 2–4 GB de RAM, 20–25 GB de disco |
+| Aplicación web | OWASP Juice Shop (imagen Docker fijada) |
+| Escenarios | A: permisos de archivos · B: sudo · C: cron |
+| Herramientas | Solo Bash (sin dependencia de runtime de Python) |
+| Validación | 80/80 pruebas funcionales PASAN en un contenedor limpio de Ubuntu 24.04 |
 
-## What the exercise looks like
+## Cómo se ve el ejercicio
 
-1. The owner deploys the lab (`install.sh`) and shares access with a partner.
-2. The partner enumerates the host and the web application.
-3. The partner gets a foothold as `labuser`, then reads the **USER flag**.
-4. The partner escalates to the intermediate account `labpriv` (Scenario B) and
-   reads the **PRIVILEGE flag**.
-5. The partner obtains root through any scenario and reads the **ROOT flag**.
-6. Both document evidence; the owner applies `harden.sh`.
-7. The partner repeats the attempt and proves the paths are closed.
+1. El propietario despliega el laboratorio (`install.sh`) y comparte el acceso con
+   un compañero.
+2. El compañero enumera el host y la aplicación web.
+3. El compañero obtiene un punto de apoyo como `labuser` y lee la **flag USER**.
+4. El compañero escala a la cuenta intermedia `labpriv` (Escenario B) y lee la
+   **flag PRIVILEGE**.
+5. El compañero obtiene root por cualquiera de los escenarios y lee la **flag
+   ROOT**.
+6. Ambos documentan la evidencia; el propietario aplica `harden.sh`.
+7. El compañero repite el intento y demuestra que los caminos están cerrados.
 
-## Quick start
+## Inicio rápido
 
 ```bash
-# On a disposable Ubuntu Server 24.04 VM, on an isolated network:
-git clone <this repo> vulnserver && cd vulnserver
+# En una VM desechable de Ubuntu Server 24.04, en una red aislada:
+git clone <este-repo> vulnserver && cd vulnserver
 sudo ./install.sh --install-deps --activate a,b,c
 
-./lab-manager.sh            # status / scenario control (interactive)
-sudo ./audit.sh             # read-only findings report
-sudo ./harden.sh --apply    # hardened equivalent, with backups
+./lab-manager.sh            # estado / control de escenarios (interactivo)
+sudo ./audit.sh             # reporte de hallazgos de solo lectura
+sudo ./harden.sh --apply    # equivalente endurecido, con respaldos
 ```
 
-Juice Shop is published on port **3000** by default and restricted by UFW to
-`LAB_ALLOWED_NETS`. SSH allows only `adminlab` and `labuser`, never root.
+Juice Shop se publica en el puerto **3000** por omisión y UFW la restringe a
+`LAB_ALLOWED_NETS`. SSH permite únicamente a `adminlab` y `labuser`, nunca a
+root.
 
-## Repository layout
+## Estructura del repositorio
 
 ```
 vulnserver/
-├── install.sh                 # full installation (idempotent)
-├── uninstall.sh               # reverse installation, keeps evidence by default
-├── lab-manager.sh             # terminal administration UI
-├── audit.sh                   # read-only audit -> reports/audit-<ts>.md
-├── harden.sh                  # backup + fix + verify
-├── reset-lab.sh               # clean state, rotate flags
-├── lib/common.sh              # logging, config, safety helpers
+├── install.sh                 # instalación completa (idempotente)
+├── uninstall.sh               # instalación inversa, conserva evidencia por omisión
+├── lab-manager.sh             # interfaz de administración en terminal
+├── audit.sh                   # auditoría de solo lectura -> reports/audit-<ts>.md
+├── harden.sh                  # respaldo + corrección + verificación
+├── reset-lab.sh               # estado limpio, rota las flags
+├── lib/common.sh              # registro, configuración, utilidades de seguridad
 ├── config/
-│   ├── lab.conf               # all tunables (env-overridable)
-│   ├── ssh/99-vulnserver.conf # sshd drop-in
-│   ├── ufw/ufw-rules.sh       # isolation firewall
+│   ├── lab.conf               # todos los parámetros (sobrescribibles por entorno)
+│   ├── ssh/99-vulnserver.conf # drop-in de sshd
+│   ├── ufw/ufw-rules.sh       # firewall de aislamiento
 │   └── scenarios/scenarios.conf
 ├── scripts/
-│   ├── users/                 # account creation
-│   ├── permissions/           # baseline permission model
-│   ├── sudo/                  # baseline sudo policy
-│   ├── cron/                  # cron baseline
+│   ├── users/                 # creación de cuentas
+│   ├── permissions/           # modelo base de permisos
+│   ├── sudo/                  # política base de sudo
+│   ├── cron/                  # base de cron
 │   ├── scenarios/             # scenario-a.sh, scenario-b.sh, scenario-c.sh
-│   ├── flags/                 # flag generation and verification
-│   ├── monitoring/            # auditd rules, activity report
-│   ├── remote/                # WireGuard access for cloud VMs
-│   └── cloud/                 # provision.sh (Hetzner/Vultr), VM bootstrap, cloud-init
-├── cloud-init/                # user-data template for unattended first boot
+│   ├── flags/                 # generación y verificación de flags
+│   ├── monitoring/            # reglas de auditd, reporte de actividad
+│   ├── remote/                # acceso WireGuard para VMs en la nube
+│   └── cloud/                 # provision.sh (Hetzner/Vultr), arranque de VM, cloud-init
+├── cloud-init/                # plantilla user-data para el primer arranque desatendido
 ├── web/docker-compose.yml     # OWASP Juice Shop
-├── tests/                     # container-based functional test suite (+ cloud mock)
-├── flags/ logs/ backups/ reports/   # runtime (git-ignored)
-└── docs/                      # student, admin, hardening, cloud, instructor
+├── tests/                     # suite de pruebas funcionales en contenedor (+ mock de nube)
+├── flags/ logs/ backups/ reports/   # en tiempo de ejecución (ignorados por git)
+└── docs/                      # estudiante, administrador, hardening, nube, instructor
 ```
 
-## Documentation
+## Documentación
 
-| Document | Audience |
+| Documento | Dirigido a |
 |---|---|
-| [docs/INSTALLATION.md](docs/INSTALLATION.md) | owner: deploy on VM/host |
-| [docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md) | owner: operate, back up, restore |
-| [docs/ATTACKER_GUIDE.md](docs/ATTACKER_GUIDE.md) | participant: scope, goals, report template |
-| [docs/HARDENING_GUIDE.md](docs/HARDENING_GUIDE.md) | owner: fix each finding, verify |
-| [docs/CLOUD_DEPLOYMENT.md](docs/CLOUD_DEPLOYMENT.md) | owner: cloud VM + WireGuard |
-| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | everyone |
-| [docs/INSTRUCTOR_SOLUTIONS.md](docs/INSTRUCTOR_SOLUTIONS.md) | instructor only: full solutions |
-| [docs/TEST_REPORT.md](docs/TEST_REPORT.md) | instructor: what was actually verified |
+| [docs/INSTALLATION.md](docs/INSTALLATION.md) | propietario: desplegar en VM/host |
+| [docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md) | propietario: operar, respaldar, restaurar |
+| [docs/ATTACKER_GUIDE.md](docs/ATTACKER_GUIDE.md) | participante: alcance, objetivos, plantilla de reporte |
+| [docs/HARDENING_GUIDE.md](docs/HARDENING_GUIDE.md) | propietario: corregir cada hallazgo, verificar |
+| [docs/CLOUD_DEPLOYMENT.md](docs/CLOUD_DEPLOYMENT.md) | propietario: VM en la nube + WireGuard |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | todos |
+| [docs/INSTRUCTOR_SOLUTIONS.md](docs/INSTRUCTOR_SOLUTIONS.md) | solo instructor: soluciones completas |
+| [docs/TEST_REPORT.md](docs/TEST_REPORT.md) | instructor: qué se verificó realmente |
 
-## Design guarantees
+## Garantías de diseño
 
-- **Isolation** — UFW default-deny; SSH and Juice Shop limited to configured
-  networks; no Docker API on TCP; no database ports; no admin panel.
-- **Reproducibility** — pinned image tag, idempotent scripts, generated flags.
-- **Auditability** — JSONL event log, sudo transcript log, auditd rules,
-  journald integration; students cannot write to the log directory.
-- **Reversibility** — every scenario has `deactivate`; `harden.sh` backs up
-  before changing anything; `reset-lab.sh` restores baseline and rotates flags.
+- **Aislamiento** — UFW con política de denegar por omisión; SSH y Juice Shop
+  limitados a las redes configuradas; sin API de Docker en TCP; sin puertos de
+  base de datos; sin panel de administración.
+- **Reproducibilidad** — etiqueta de imagen fijada, scripts idempotentes, flags
+  generadas al azar.
+- **Auditabilidad** — bitácora de eventos en JSONL, registro de transcripción de
+  sudo, reglas de auditd, integración con journald; los estudiantes no pueden
+  escribir en el directorio de logs.
+- **Reversibilidad** — cada escenario tiene `deactivate`; `harden.sh` respalda
+  antes de cambiar nada; `reset-lab.sh` restaura la línea base y rota las flags.
 
-## License
+## Licencia
 
-MIT, with an additional notice restricting use to authorized isolated
-laboratories. See [LICENSE](LICENSE).
+MIT, con un aviso adicional que restringe el uso a laboratorios autorizados y
+aislados. Consulta [LICENSE](LICENSE).

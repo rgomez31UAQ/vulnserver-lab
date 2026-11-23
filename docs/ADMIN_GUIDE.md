@@ -1,60 +1,62 @@
-# Administrator guide
+# Guía del administrador
 
-For the **owner** of the VulnServer instance (the `adminlab` account). The
-attacker receives [ATTACKER_GUIDE.md](ATTACKER_GUIDE.md) instead.
+Para el **propietario** de la instancia de VulnServer (la cuenta `adminlab`). El
+atacante recibe [ATTACKER_GUIDE.md](ATTACKER_GUIDE.md) en su lugar.
 
-## 1. Mental model
+## 1. Modelo mental
 
-- `/opt/vulnserver` is the runtime state: flags, logs, backups, reports, lab data
-  and the installed copy of the toolchain (`/opt/vulnserver/bin`).
-- The git checkout is the source of truth for scripts and configuration.
-- Scenarios are independent switches stored in `/opt/vulnserver/state/scenario-*.state`.
-- `adminlab` never participates in the exercise; it is your recovery path.
+- `/opt/vulnserver` es el estado en tiempo de ejecución: flags, logs, respaldos,
+  reportes, datos del laboratorio y la copia instalada de las herramientas
+  (`/opt/vulnserver/bin`).
+- El checkout de git es la fuente de verdad de scripts y configuración.
+- Los escenarios son interruptores independientes guardados en
+  `/opt/vulnserver/state/scenario-*.state`.
+- `adminlab` nunca participa en el ejercicio; es tu vía de recuperación.
 
-## 2. Terminal interface
+## 2. Interfaz de terminal
 
 ```bash
-sudo /opt/vulnserver/bin/lab-manager.sh      # menu
+sudo /opt/vulnserver/bin/lab-manager.sh      # menú
 ```
 
-| Option | Action |
+| Opción | Acción |
 |---|---|
-| 1 | Status: container, SSH, firewall, auditd, scenarios, ports, flags |
-| 2 | Install dependencies / re-run installer |
-| 3 / 4 | Start / stop services |
-| 5 / 6 | Activate / deactivate a scenario (or all) |
-| 7 | Read-only audit |
+| 1 | Estado: contenedor, SSH, firewall, auditd, escenarios, puertos, flags |
+| 2 | Instalar dependencias / volver a ejecutar el instalador |
+| 3 / 4 | Iniciar / detener servicios |
+| 5 / 6 | Activar / desactivar un escenario (o todos) |
+| 7 | Auditoría de solo lectura |
 | 8 | Hardening |
-| 9 | Activity report |
-| 10 | Reset laboratory |
-| 11 | Documentation |
-| 12 | Exit |
+| 9 | Reporte de actividad |
+| 10 | Reiniciar el laboratorio |
+| 11 | Documentación |
+| 12 | Salir |
 
-Non-interactive equivalents: `status`, `start`, `stop`, `activate a`,
+Equivalentes sin interacción: `status`, `start`, `stop`, `activate a`,
 `deactivate all`, `audit`, `harden`, `report`, `reset`, `docs`, `logs`, `ports`.
 
-## 3. Accounts
+## 3. Cuentas
 
-| Account | Purpose | Groups | Password |
+| Cuenta | Propósito | Grupos | Contraseña |
 |---|---|---|---|
-| `adminlab` | owner, full administration | `sudo` | from `config/lab.conf` (change it) |
-| `labuser` | participant entry point | own group only | shared with participant |
-| `labpriv` | intermediate level, Scenario B | own group only | locked; not login-able |
+| `adminlab` | propietario, administración total | `sudo` | de `config/lab.conf` (cámbiala) |
+| `labuser` | punto de entrada del participante | solo su propio grupo | compartida con el participante |
+| `labpriv` | nivel intermedio, Escenario B | solo su propio grupo | bloqueada; no permite iniciar sesión |
 
 ```bash
 sudo ./scripts/users/create_users.sh status
-sudo passwd adminlab                      # rotate the owner password
-sudo ./scripts/users/create_users.sh remove   # removes lab accounts, keeps adminlab
+sudo passwd adminlab                      # rota la contraseña del propietario
+sudo ./scripts/users/create_users.sh remove   # elimina cuentas del laboratorio, conserva adminlab
 ```
 
-Rules:
+Reglas:
 
-- never add `labuser` to `sudo`, `adm` or `docker`;
-- never enable root SSH login;
-- rotate `labuser` password between groups (`sudo passwd labuser`) and tell the
-  new participant.
+- nunca agregues `labuser` a `sudo`, `adm` ni `docker`;
+- nunca habilites el login de root por SSH;
+- rota la contraseña de `labuser` entre grupos (`sudo passwd labuser`) y avísale
+  al nuevo participante.
 
-## 4. Scenario control
+## 4. Control de escenarios
 
 ```bash
 sudo ./scripts/scenarios/scenario-a.sh activate|deactivate|status|verify
@@ -62,39 +64,42 @@ sudo ./scripts/scenarios/scenario-b.sh activate|deactivate|status|verify
 sudo ./scripts/scenarios/scenario-c.sh activate|deactivate|status|verify
 ```
 
-Behaviour of each command:
+Comportamiento de cada comando:
 
-- `activate` creates a **restore point** in `/opt/vulnserver/backups/restore-<id>-<ts>/`
-  containing a `restore.sh` and a manifest (who, when, host), then applies the
-  vulnerable configuration.
-- `deactivate` restores the secure baseline for that scenario.
-- `verify` exits 0 only if the vulnerability is present (automated check).
-- Every action is logged to `events.log`.
+- `activate` crea un **punto de restauración** en
+  `/opt/vulnserver/backups/restore-<id>-<ts>/` con un `restore.sh` y un
+  manifiesto (quién, cuándo, host), y después aplica la configuración vulnerable.
+- `deactivate` restaura la línea base segura de ese escenario.
+- `verify` termina con código 0 solo si la vulnerabilidad está presente
+  (verificación automatizada).
+- Toda acción se registra en `events.log`.
 
-Independent activation is supported: A only, B only, C only, or any combination.
+Se admite la activación independiente: solo A, solo B, solo C o cualquier
+combinación.
 
 ## 5. Flags
 
 ```bash
-sudo ./scripts/flags/generate_flags.sh generate --force   # rotate all three
-sudo ./scripts/flags/generate_flags.sh verify             # owner/group/mode check
-sudo ./scripts/flags/generate_flags.sh show               # print values (admin only)
+sudo ./scripts/flags/generate_flags.sh generate --force   # rota las tres
+sudo ./scripts/flags/generate_flags.sh verify             # revisa dueño/grupo/modo
+sudo ./scripts/flags/generate_flags.sh show               # imprime los valores (solo admin)
 ```
 
-| File | Owner | Mode | Reachable by |
+| Archivo | Dueño | Modo | Accesible por |
 |---|---|---|---|
 | `flags/user.txt` | `labuser:labuser` | `600` | labuser |
 | `flags/privilege.txt` | `root:labpriv` | `640` | labpriv, root |
 | `flags/root.txt` | `root:root` | `400` | root |
 
-Expected sequence for grading: user flag with initial access, privilege flag
-after reaching `labpriv`, root flag at root. Any root session can read all three,
-so grade the *order and evidence*, not just the strings.
+Secuencia esperada para calificar: flag de usuario con el acceso inicial, flag de
+privilegio al llegar a `labpriv`, flag de root al ser root. Cualquier sesión de
+root puede leer las tres, así que califica el *orden y la evidencia*, no solo las
+cadenas.
 
-Record the values somewhere outside the VM if you need to verify a submission;
-`reset-lab.sh` rotates them.
+Guarda los valores en algún lugar fuera de la VM si necesitas verificar una
+entrega; `reset-lab.sh` los rota.
 
-## 6. Services
+## 6. Servicios
 
 ```bash
 sudo ./lab-manager.sh status
@@ -103,119 +108,122 @@ sudo docker compose -f /opt/vulnserver/web/docker-compose.yml logs --tail 50
 sudo ./lab-manager.sh start|stop
 ```
 
-SSH: `systemctl status ssh`, config drop-in `/etc/ssh/sshd_config.d/99-vulnserver.conf`.
+SSH: `systemctl status ssh`, archivo drop-in
+`/etc/ssh/sshd_config.d/99-vulnserver.conf`.
 
-## 7. Logs and monitoring
+## 7. Logs y monitoreo
 
-| Source | Location |
+| Fuente | Ubicación |
 |---|---|
-| Lab events (JSONL one object per line) | `/opt/vulnserver/logs/events.log` |
-| Human-readable lab log | `/opt/vulnserver/logs/vulnserver.log` |
-| Sudo transcript (input/output) | `/var/log/sudo-vulnserver.log` |
-| SSH / auth | `journalctl -u ssh`, `/var/log/auth.log` |
+| Eventos del laboratorio (JSONL, un objeto por línea) | `/opt/vulnserver/logs/events.log` |
+| Bitácora legible del laboratorio | `/opt/vulnserver/logs/vulnserver.log` |
+| Transcripción de sudo (entrada/salida) | `/var/log/sudo-vulnserver.log` |
+| SSH / autenticación | `journalctl -u ssh`, `/var/log/auth.log` |
 | Cron | `journalctl -u cron`, `/var/log/syslog` |
 | auditd | `ausearch -k vulnserver_flags`, `aureport` |
 | Docker | `docker logs vulnserver-juice-shop` |
-| Installed rule set | `/etc/audit/rules.d/vulnserver.rules` |
+| Conjunto de reglas instalado | `/etc/audit/rules.d/vulnserver.rules` |
 
-The log directory is `root:root 0750`, so `labuser` cannot read or modify it.
-`events.log` records: timestamp, host, actor (real invoking user), event,
-service, scenario, result, detail.
+El directorio de logs es `root:root 0750`, así que `labuser` no puede leerlo ni
+modificarlo. `events.log` registra: marca de tiempo, host, actor (usuario real
+que invoca), evento, servicio, escenario, resultado y detalle.
 
-Generate a report:
+Genera un reporte:
 
 ```bash
-sudo ./lab-manager.sh report          # or: sudo ./scripts/monitoring/report.sh --days 7
+sudo ./lab-manager.sh report          # o: sudo ./scripts/monitoring/report.sh --days 7
 ```
 
-Output goes to `/opt/vulnserver/reports/lab-report-<ts>.md`. Flag values are
-never written into reports.
+La salida va a `/opt/vulnserver/reports/lab-report-<ts>.md`. Los valores de las
+flags nunca se escriben en los reportes.
 
-## 8. Audit and hardening cycle
+## 8. Ciclo de auditoría y hardening
 
 ```bash
-sudo ./audit.sh                       # read-only, writes reports/audit-<ts>.md
-sudo ./audit.sh --only sudo,cron,suid # focused
-sudo ./harden.sh                      # interactive: analyse, confirm, fix
-sudo ./harden.sh --apply --yes        # non-interactive
+sudo ./audit.sh                       # solo lectura, escribe reports/audit-<ts>.md
+sudo ./audit.sh --only sudo,cron,suid # enfoque específico
+sudo ./harden.sh                      # interactivo: analiza, confirma, corrige
+sudo ./harden.sh --apply --yes        # sin interacción
 sudo ./harden.sh --restore /opt/vulnserver/backups/files-<ts>
 ```
 
-Recommended workflow for the exercise:
+Flujo de trabajo recomendado para el ejercicio:
 
-1. Audit before the attack; keep the report as the "before" evidence.
-2. Run the attack; collect the student report.
-3. `harden.sh --apply` (or let the owner do it manually following
+1. Audita antes del ataque; conserva el reporte como evidencia del "antes".
+2. Ejecuta el ataque; recoge el reporte del estudiante.
+3. `harden.sh --apply` (o deja que el propietario lo haga a mano siguiendo
    [HARDENING_GUIDE.md](HARDENING_GUIDE.md)).
-4. Audit again; the "after" report must show the findings resolved.
-5. `reset-lab.sh` before the next group.
+4. Audita de nuevo; el reporte del "después" debe mostrar los hallazgos
+   resueltos.
+5. `reset-lab.sh` antes del siguiente grupo.
 
-Before disabling SSH password authentication, make sure `authorized_keys` are
-distributed: `harden.sh` asks for confirmation for exactly this reason.
+Antes de deshabilitar la autenticación por contraseña en SSH, asegúrate de que
+los `authorized_keys` estén distribuidos: `harden.sh` pide confirmación
+exactamente por esta razón.
 
-## 9. Backups and restore
+## 9. Respaldos y restauración
 
-| Directory | Contents | Retention |
+| Directorio | Contenido | Retención |
 |---|---|---|
-| `backups/files-<ts>/` | files replaced by `harden.sh` + `index.txt` | keep per group |
-| `backups/restore-<id>-<ts>/` | automatic restore point per activation | keep per group |
-| `backups/logs-<ts>.tar.gz` | archived logs from `reset-lab.sh` | keep as evidence |
+| `backups/files-<ts>/` | archivos reemplazados por `harden.sh` + `index.txt` | uno por grupo |
+| `backups/restore-<id>-<ts>/` | punto de restauración automático por activación | uno por grupo |
+| `backups/logs-<ts>.tar.gz` | logs archivados por `reset-lab.sh` | conservar como evidencia |
 
 ```bash
 sudo tar -czf /root/vulnserver-backup-$(date +%F).tar.gz -C /opt vulnserver
 ```
 
-Hypervisor snapshots are the most reliable rollback; take one after a clean
-install and one after hardening.
+Las instantáneas del hipervisor son el rollback más confiable; toma una después
+de una instalación limpia y otra después del hardening.
 
-Restore a hardening backup:
+Restaurar un respaldo de hardening:
 
 ```bash
 sudo ./harden.sh --restore /opt/vulnserver/backups/files-20261123-101500
 sudo ./audit.sh --stdout | head -30
 ```
 
-## 10. Remote access
+## 10. Acceso remoto
 
-Preferred: WireGuard tunnel, then SSH/HTTP only over the tunnel.
+Preferido: túnel WireGuard y, después, SSH/HTTP solo a través del túnel.
 
 ```bash
 sudo apt install -y wireguard
 sudo ./config/ufw/ufw-rules.sh apply
-# Then restrict SSH to the tunnel network only:
+# Luego restringe SSH solo a la red del túnel:
 #   SSH_ALLOWED_NETS="10.8.0.0/24" sudo ./install.sh --no-docker --no-auditd
 ```
 
-See [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md) for a complete WireGuard
-configuration and for the cloud firewall rules.
+Consulta [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md) para una configuración
+WireGuard completa y para las reglas del firewall en la nube.
 
-## 11. Between groups
-
-```bash
-sudo ./reset-lab.sh --yes        # deactivate, clean practice data, rotate flags
-sudo ./audit.sh                  # confirm baseline
-```
-
-`reset-lab.sh` never deletes `backups/`.
-
-## 12. Decommission
+## 11. Entre grupos
 
 ```bash
-sudo ./uninstall.sh            # keeps state for evidence
-sudo ./uninstall.sh --purge    # removes /opt/vulnserver
-# finally delete the VM
+sudo ./reset-lab.sh --yes        # desactiva, limpia datos de práctica, rota flags
+sudo ./audit.sh                  # confirma la línea base
 ```
 
-## 13. Operator checklist
+`reset-lab.sh` nunca borra `backups/`.
 
-Before handing the lab over:
+## 12. Retiro del laboratorio
 
-- [ ] VM on an isolated/NAT network, snapshot taken
-- [ ] `adminlab` password rotated, keys installed, not shared
-- [ ] `labuser` password shared only with the participant
-- [ ] scenarios activated as intended (`lab-manager.sh status`)
-- [ ] Juice Shop reachable from the participant network only
-- [ ] UFW active, no database/admin ports listening
-- [ ] auditd active, `events.log` writable by root only
-- [ ] instructor copy of the flags stored outside the VM
-- [ ] participant received only `ATTACKER_GUIDE.md`
+```bash
+sudo ./uninstall.sh            # conserva el estado como evidencia
+sudo ./uninstall.sh --purge    # elimina /opt/vulnserver
+# finalmente borra la VM
+```
+
+## 13. Lista de verificación del operador
+
+Antes de entregar el laboratorio:
+
+- [ ] VM en una red aislada/NAT e instantánea tomada
+- [ ] contraseña de `adminlab` rotada, llaves instaladas y no compartidas
+- [ ] contraseña de `labuser` compartida solo con el participante
+- [ ] escenarios activados según lo previsto (`lab-manager.sh status`)
+- [ ] Juice Shop accesible solo desde la red del participante
+- [ ] UFW activo, sin puertos de base de datos ni de administración escuchando
+- [ ] auditd activo, `events.log` escribible solo por root
+- [ ] copia del instructor de las flags guardada fuera de la VM
+- [ ] el participante recibió solo `ATTACKER_GUIDE.md`
