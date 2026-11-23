@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+# =============================================================================
+# VulnServer - scripts/cloud/make-cloud-init.sh
+#
+# Renders cloud-init/user-data.yaml from the template so a fresh Ubuntu 24.04
+# VM installs WireGuard and the whole laboratory unattended at first boot.
+#
+#   ./scripts/cloud/make-cloud-init.sh \
+#       --repo-url https://github.com/<you>/vulnserver/archive/refs/heads/main.tar.gz \
+#       --peer owner --out /tmp/vulnserver-user-data.yaml
+#
+# Then paste that file into the provider's "user data" field (Hetzner Console,
+# Vultr deploy form, OCI instance metadata) or pass it to provision.sh.
+#
+# Requirements on the VM: it must be able to reach the URL at boot. A public
+# repository, a release tarball or a signed URL all work; a private repository
+# needs a token embedded in the URL, which then lives in the instance metadata.
+#
+# Hetzner limits user_data to 32 KiB, so the project is downloaded, not embedded.
+# =============================================================================
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+TEMPLATE="${SCRIPT_DIR}/cloud-init/user-data.yaml.tpl"
+REPO_URL=""
+BRANCH="main"
+PEER="owner"
+LAB_ARGS="--install-deps --activate a,b,c --yes"
+OUT="${SCRIPT_DIR}/cloud-init/user-data.yaml"
+LOG_FILE="/var/log/vulnserver-bootstrap.log"
+FORCE=0
+MAX_BYTES=32768   # Hetzner Cloud hard limit for user_data
+
+usage() {
+    sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'
+    cat <<'EOF'
+
+Options:
+  --repo-url URL   https URL of the project (git repo or .tar.gz). Required.
+  --branch NAME    branch used when cloning (default main)
+  --peer NAME      WireGuard peer for the operator (default owner)
+  --lab-args ARGS  install.sh arguments (default "--install-deps --activate a,b,c --yes")
+  --out PATH       output file (default cloud-init/user-data.yaml)
+  --force          overwrite an existing output file
+  -h, --help       this help
+EOF
+}
+
+die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+
+while (( $# > 0 )); do
+    case "$1" in
+        --repo-url) REPO_URL="${2:?--repo-url needs a URL}"; shift 2 ;;
+        --branch)   BRANCH="${2:?--branch needs a name}"; shift 2 ;;
+        --peer)     PEER="${2:?--peer needs a name}"; shift 2 ;;
+        --lab-args) LAB_ARGS="${2:?--lab-args needs arguments}"; shift 2 ;;
+        --out)      OUT="${2:?--out needs a path}"; shift 2 ;;
+        --force)    FORCE=1; shift ;;
+        -h|--help)  usage; exit 0 ;;
+        *)          die "unknown option: $1 (try --help)" ;;
+    esac
+done
+
+# -----------------------------------------------------------------------------
+# Validation: these values are interpolated into shell code inside YAML.
+# -----------------------------------------------------------------------------
+[[ -n "$REPO_URL" ]] || die "--repo-url is required (the VM downloads the project at boot)"
+[[ "$REPO_URL" == https://* ]] || die "--repo-url must use https:// (got: ${REPO_URL})"
+[[ "$REPO_URL" != *[\"\'\`\$\ ]* ]] || die "--repo-url contains characters that are unsafe in cloud-init"
+[[ "$BRANCH" =~ ^[A-Za-z0-9._/-]+$ ]] || die "invalid --branch"
+[[ "$PEER" =~ ^[a-z0-9][a-z0-9-]{0,20}$ ]] || die "invalid --peer (lowercase letters, digits, dash)"
+[[ "$LAB_ARGS" != *[\"\'\`\$]* ]] || die "--lab-args must not contain quotes, backticks or dollars"
+[[ -r "$TEMPLATE" ]] || die "template not found: ${TEMPLATE}"
+
+if [[ -e "$OUT" ]] && (( FORCE == 0 )); then
+    die "${OUT} already exists; re-run with --force to replace it"
+fi
+
+# -----------------------------------------------------------------------------
+# Render (plain parameter expansion: no escaping surprises)
+# -----------------------------------------------------------------------------
+rendered="$(mktemp)"
+while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line//__REPO_URL__/$REPO_URL}"
+    line="${line//__BRANCH__/$BRANCH}"
+    line="${line//__PEER__/$PEER}"
+    line="${line//__LAB_ARGS__/$LAB_ARGS}"
+    line="${line//__BOOTSTRAP_LOG__/$LOG_FILE}"
+    printf '%s\n' "$line"
+done < "$TEMPLATE" > "$rendered"
+
+# Any leftover placeholder means the template and the generator disagree.
+if grep -q '__[A-Z_]*__' "$rendered"; then
+    printf '[x] unreplaced placeholders remain:\n' >&2
+    grep -o '__[A-Z_]*__' "$rendered" | sort -u >&2
+    rm -f "$rendered"
+    exit 1
+fi
+
+size="$(wc -c < "$rendered" | tr -d ' ')"
+if (( size > MAX_BYTES )); then
+    rm -f "$rendered"
+    die "rendered user-data is ${size} bytes, above the ${MAX_BYTES}-byte provider limit"
+fi
+
+# YAML syntax check when PyYAML is available; otherwise verify the header.
+if python3 -c 'import yaml' >/dev/null 2>&1; then
+    python3 - "$rendered" <<'PY' || { rm -f "$rendered"; die "generated YAML is invalid"; }
+import sys, yaml
+with open(sys.argv[1]) as fh:
+    data = yaml.safe_load(fh)
+assert isinstance(data, dict), "top level must be a mapping"
+assert "runcmd" in data, "runcmd missing"
+PY
+else
+    head -n1 "$rendered" | grep -qx '#cloud-config' || die "missing #cloud-config header"
+fi
+
+mkdir -p "$(dirname "$OUT")"
+mv "$rendered" "$OUT"
+chmod 0600 "$OUT"
+
+printf '[+] cloud-init user-data written to %s (%s bytes)\n' "$OUT" "$size"
+printf '    repo   : %s\n' "$REPO_URL"
+printf '    peer   : %s\n' "$PEER"
+printf '    install: %s\n' "$LAB_ARGS"
+cat <<'EOF'
+
+Next:
+  1. Import the file as user data when creating the VM:
+       Hetzner Console -> server -> Cloud config
+       Vultr          -> Deploy New Server -> Additional Features -> Cloud-Init
+       OCI            -> Instance -> Advanced options -> Initialization script
+  2. Allow inbound UDP 51820 in the provider firewall (and 22/tcp from your IP).
+  3. After boot:
+       ssh root@<vm-ip> cat /var/log/vulnserver-bootstrap.log
+       scp root@<vm-ip>:/etc/wireguard/clients/owner.conf .
+     Import that file into the WireGuard app, connect, then open
+     http://10.8.0.1:3000/ and ssh labuser@10.8.0.1.
+EOF

@@ -1,0 +1,61 @@
+version: "3.9"
+
+# =============================================================================
+# VulnServer - web/docker-compose.yml
+# OWASP Juice Shop, the deliberately vulnerable training application.
+#
+#   * Published only on ${LAB_BIND_ADDR}:${JUICE_SHOP_PORT}; restrict the
+#     source networks with UFW (config/ufw/ufw-rules.sh) or WireGuard.
+#   * Pinned image tag for reproducibility.
+#   * Memory limit, log rotation and no-new-privileges keep the container from
+#     affecting the host.
+#   * Persistence lives in a named volume so reset-lab.sh can wipe it cleanly.
+# =============================================================================
+name: vulnserver
+
+services:
+  juice-shop:
+    image: ${JUICE_SHOP_IMAGE:-bkimminich/juice-shop:v17.1.1}
+    container_name: vulnserver-juice-shop
+    restart: unless-stopped
+    ports:
+      # host:container - host side configurable, container side is fixed (3000)
+      - "${LAB_BIND_ADDR:-0.0.0.0}:${JUICE_SHOP_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+    mem_limit: ${JUICE_SHOP_MEMORY_LIMIT:-1g}
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - juice_data:/juice-shop/data
+    networks:
+      - labnet
+    healthcheck:
+      # The Juice Shop image is shell-less and ships Node under /nodejs/bin,
+      # which is not on PATH: the absolute interpreter path is required.
+      test:
+        - CMD
+        - /nodejs/bin/node
+        - -e
+        - "fetch('http://127.0.0.1:3000/rest/admin/application-version').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+        tag: "vulnserver-juice-shop"
+
+volumes:
+  juice_data:
+    name: ${JUICE_SHOP_VOLUME:-vulnserver_juice_data}
+
+networks:
+  labnet:
+    name: ${LAB_NET_NAME:-vulnserver_labnet}
+    ipam:
+      config:
+        - subnet: ${LAB_NET_SUBNET:-172.28.60.0/24}

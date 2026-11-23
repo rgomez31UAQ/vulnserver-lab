@@ -1,0 +1,46 @@
+# =============================================================================
+# VulnServer - .gitignore
+# The lab generates sensitive artefacts (flags, logs, evidence, backups).
+# None of them may ever be committed.
+# =============================================================================
+
+# Generated flags and runtime state
+flags/*
+!flags/.gitkeep
+logs/*
+!logs/.gitkeep
+backups/*
+!backups/.gitkeep
+reports/*
+!reports/.gitkeep
+state/
+
+# Local configuration and compose overrides
+web/.env
+*.env.local
+config/lab.local.conf
+
+# Documentation artefacts
+*.log
+*.tar.gz
+*.tgz
+*.zip
+
+# Cloud provisioning: operator state, WireGuard client keys and rendered
+# user-data contain per-deployment material and must never be committed.
+# The Ubuntu ISO is 3.9 GB and is not part of the project.
+provision/
+clients/
+cloud-init/user-data.yaml
+*.iso
+
+# Editors / OS noise
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Python / test caches
+__pycache__/
+*.pyc
+.pytest_cache/
