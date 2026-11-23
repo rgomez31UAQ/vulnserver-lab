@@ -4,6 +4,9 @@ A reproducible, deliberately vulnerable Ubuntu Server 24.04 laboratory for a
 university **server hardening** exercise. One student owns and hardens the
 server; a second authorized student attacks it; both document the result.
 
+Project site: <https://rgomez31UAQ.github.io/vulnserver-lab/> (Spanish, static —
+GitHub Pages presents the lab, it cannot host the vulnerable server).
+
 > **Authorized, isolated use only.** VulnServer creates a SUID root binary, an
 > over-broad sudo policy and a root cron job executing a user-writable script.
 > Anyone with local access can become root. Run it only on a disposable VM or a

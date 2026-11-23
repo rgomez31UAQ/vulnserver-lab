@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cloud-tooling:
+    name: cloud tooling (mock APIs)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Provisioning, destroy and cloud-init rendering
+        run: ./tests/test-cloud.sh
+
+  lab-suite:
+    name: functional suite (Ubuntu 24.04 container)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run the 80-check suite
+        run: RUN_CRON_TEST=1 ./tests/test-container.sh
+      - name: Upload the test matrix
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-matrix
+          path: reports/
+          if-no-files-found: warn

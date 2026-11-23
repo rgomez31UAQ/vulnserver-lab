@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VulnServer — Laboratorio de hardening y escalada de privilegios</title>
+<meta name="description" content="Laboratorio educativo reproducible sobre Ubuntu Server 24.04: tres escenarios de escalada de privilegios, auditoría, hardening y reinicio, con Juice Shop.">
+<meta name="color-scheme" content="dark">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>">
+</head>
+<body>
+
+<div class="warning" role="note">
+  <strong>Uso autorizado y aislado.</strong> El laboratorio crea un binario SUID, una política de sudo
+  demasiado amplia y un cron de root. Cualquiera con acceso local puede convertirse en root:
+  úsalo solo en una VM desechable o un host dedicado, nunca en producción.
+</div>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="eyebrow">Ubuntu Server 24.04 · Laboratorio educativo</p>
+    <h1>VulnServer</h1>
+    <p class="lead">
+      Un servidor deliberadamente vulnerable para practicar <strong>hardening</strong> y
+      <strong>escalada de privilegios</strong>: tres caminos reales hacia root, auditoría,
+      hardening con <em>rollback</em> y reinicio de estado entre sesiones.
+    </p>
+    <ul class="facts">
+      <li><span>80/80</span> tests funcionales</li>
+      <li><span>3</span> escenarios de escalada</li>
+      <li><span>Solo Bash</span> sin dependencias de runtime</li>
+      <li><span>Juice Shop</span> como aplicación web</li>
+    </ul>
+    <p class="cta">
+      <a class="btn primary" href="https://github.com/rgomez31UAQ/vulnserver-lab">Ver el repositorio</a>
+      <a class="btn" href="#instalacion">Empezar</a>
+      <a class="btn" href="https://github.com/rgomez31UAQ/vulnserver-lab/tree/main/docs">Documentación</a>
+    </p>
+  </div>
+</header>
+
+<main>
+
+<section id="ejercicio" class="wrap">
+  <h2>Cómo funciona el ejercicio</h2>
+  <p class="sub">Dos roles, un servidor. Uno lo endurece; el otro intenta comprometerlo. Ambos documentan.</p>
+  <ol class="steps">
+    <li><b>El propietario</b> despliega el laboratorio con <code>install.sh</code> y da acceso a su pareja.</li>
+    <li><b>El atacante</b> enumera el host y la aplicación web.</li>
+    <li>Obtiene un punto de apoyo como <code>labuser</code> y lee la flag <b>USER</b>.</li>
+    <li>Escala a <code>labpriv</code> y lee la flag <b>PRIVILEGE</b>.</li>
+    <li>Llega a root por cualquiera de los escenarios y lee la flag <b>ROOT</b>.</li>
+    <li><b>El propietario</b> aplica <code>harden.sh</code> con copias de seguridad.</li>
+    <li>Se repite el ataque y se demuestra que los caminos están cerrados.</li>
+  </ol>
+</section>
+
+<section id="escenarios" class="wrap">
+  <h2>Los tres escenarios</h2>
+  <p class="sub">Cada uno es independiente, se activa por separado y tiene su propio parche verificable.</p>
+  <div class="cards">
+    <article class="card">
+      <p class="tag risk-alto">A · Riesgo alto</p>
+      <h3>Permisos de archivo</h3>
+      <p>Un bit SUID sobre una utilidad estándar y un directorio escribible por todos. Demuestra por qué cualquier ruta escribible que se ejecute en un contexto privilegiado termina en root.</p>
+      <p class="art"><code>/usr/bin/find</code> · <code>/opt/vulnserver/lab/perms</code></p>
+    </article>
+    <article class="card">
+      <p class="tag risk-alto">B · Riesgo alto</p>
+      <h3>Configuración de sudo</h3>
+      <p>Una delegación mal acotada hacia la cuenta intermedia permite saltar de <code>labuser</code> a <code>labpriv</code> sin explotar ningún binario del sistema.</p>
+      <p class="art">sudoers drop-in · cuenta <code>labpriv</code></p>
+    </article>
+    <article class="card">
+      <p class="tag risk-alto">C · Riesgo alto</p>
+      <h3>Tarea cron de root</h3>
+      <p>Un script escribible por un usuario se ejecuta como root cada minuto. El ejemplo más limpio de por qué la propiedad del fichero importa tanto como sus permisos.</p>
+      <p class="art">cron de root · script en <code>/opt/vulnserver</code></p>
+    </article>
+  </div>
+</section>
+
+<section id="instalacion" class="wrap">
+  <h2>Instalación</h2>
+  <p class="sub">Una VM Ubuntu Server 24.04 en red aislada, 2 vCPU y 2–4 GB de RAM.</p>
+<pre><code><span class="c"># En una VM desechable, en una red NAT o host-only:</span>
+git clone https://github.com/rgomez31UAQ/vulnserver-lab.git vulnserver
+cd vulnserver
+sudo ./install.sh --install-deps --activate a,b,c
+
+./lab-manager.sh          <span class="c"># estado y control de escenarios</span>
+sudo ./audit.sh           <span class="c"># informe de hallazgos, solo lectura</span>
+sudo ./harden.sh --apply  <span class="c"># equivalente endurecido, con copias</span></code></pre>
+  <p class="note">
+    Juice Shop se publica en el puerto <b>3000</b> y UFW lo limita a <code>LAB_ALLOWED_NETS</code>.
+    Por SSH solo entran <code>adminlab</code> y <code>labuser</code>; root nunca.
+  </p>
+</section>
+
+<section id="nube" class="wrap">
+  <h2>En la nube, solo por el túnel</h2>
+  <p class="sub">Un VPS expuesto es un VPS comprometido en horas. Aquí solo se abre WireGuard.</p>
+  <div class="grid2">
+    <div>
+      <h3>Un comando</h3>
+      <p><code>provision.sh</code> crea la VM en Hetzner o Vultr, registra tu clave SSH, levanta un firewall que solo permite <b>UDP 51820</b> y <b>TCP 22 desde tu IP</b>, sube el proyecto, monta el túnel y descarga los perfiles de cliente.</p>
+<pre><code>export HCLOUD_TOKEN=...
+./scripts/cloud/provision.sh \
+  --provider hetzner --name vulnserver-1</code></pre>
+    </div>
+    <div>
+      <h3>Primer arranque desatendido</h3>
+      <p>Si el repositorio es público, la VM puede instalarse sola con cloud-init: el user-data pesa unos 2,5 KB porque descarga el proyecto en lugar de incrustarlo (Hetzner limita <code>user_data</code> a 32 KiB).</p>
+      <p>Al terminar: <code>ssh labuser@10.8.0.1</code> y <code>http://10.8.0.1:3000/</code>. Nada más está publicado.</p>
+    </div>
+  </div>
+  <p class="note">
+    GitHub Pages es alojamiento estático: esta web presenta el laboratorio, no lo ejecuta.
+    El servidor vulnerable se levanta en tu VM.
+  </p>
+</section>
+
+<section id="verificacion" class="wrap">
+  <h2>Verificación, no promesas</h2>
+  <p class="sub">Cada afirmación de este proyecto viene con la prueba que la respalda.</p>
+  <div class="checks">
+    <div><b>80/80</b><span>suite funcional en un contenedor Ubuntu 24.04 limpio, incluida una ejecución real de cron y dos compromisos completos de root</span></div>
+    <div><b>23/23</b><span>tooling de nube contra un mock de las APIs de Hetzner y Vultr, con los cuerpos de petición verificados</span></div>
+    <div><b>WireGuard</b><span><code>wg0</code> real en <code>10.8.0.1/24</code> dentro de un contenedor con <code>NET_ADMIN</code>, arranque idempotente</span></div>
+    <div><b>Abierto</b><span>lo que no se ha podido probar (API real, firewall del proveedor, arranque cloud-init) está listado en el informe de pruebas</span></div>
+  </div>
+  <p class="cta small"><a class="btn" href="https://github.com/rgomez31UAQ/vulnserver-lab/blob/main/docs/TEST_REPORT.md">Leer el informe de pruebas</a></p>
+</section>
+
+<section id="docs" class="wrap">
+  <h2>Documentación</h2>
+  <div class="docgrid">
+    <a href="https://github.com/rgomez31UAQ/vulnserver-lab/blob/main/docs/INSTALLATION.md"><b>Instalación</b><span>plataformas, red aislada y despliegue</span></a>
+    <a href="https://github.com/rgomez31UAQ/vulnserver-lab/blob/main/docs/ADMIN_GUIDE.md"><b>Guía del administrador</b><span>operación, flags y reinicio</span></a>
+    <a href="https://github.com/rgomez31UAQ/vulnserver-lab/blob/main/docs/ATTACKER_GUIDE.md"><b>Guía del atacante</b><span>lo que se entrega al participante</span></a>
+    <a href="https://github.com/rgomez31UAQ/vulnserver-lab/blob/main/docs/HARDENING_GUIDE.md"><b>Hardening</b><span>de vulnerable a endurecido, con verificación</span></a>
+    <a href="https://github.com/rgomez31UAQ/vulnserver-lab/blob/main/docs/CLOUD_DEPLOYMENT.md"><b>Despliegue en la nube</b><span>proveedores, WireGuard y cloud-init</span></a>
+    <a href="https://github.com/rgomez31UAQ/vulnserver-lab/blob/main/docs/INSTRUCTOR_SOLUTIONS.md"><b>Soluciones del instructor</b><span>resolución de los tres escenarios</span></a>
+    <a href="https://github.com/rgomez31UAQ/vulnserver-lab/blob/main/docs/TROUBLESHOOTING.md"><b>Problemas frecuentes</b><span>síntomas y causas</span></a>
+    <a href="https://github.com/rgomez31UAQ/vulnserver-lab/blob/main/docs/TEST_REPORT.md"><b>Informe de pruebas</b><span>qué se verificó y qué no</span></a>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p><b>VulnServer v1.0</b> · licencia y condiciones en el repositorio.</p>
+    <p class="muted">Material docente. El uso fuera de un entorno autorizado es ilegal y está fuera del alcance del proyecto.</p>
+  </div>
+</footer>
+
+</body>
+</html>
