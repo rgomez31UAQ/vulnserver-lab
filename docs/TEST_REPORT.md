@@ -267,7 +267,30 @@ docker run --rm --cap-add NET_ADMIN -v "$PWD":/src:ro ubuntu:24.04 bash -c '
   ./scripts/cloud/bootstrap-vm.sh'
 ```
 
-## 11. Conclusion
+## 11. Continuous integration and project site (2026-11-23)
+
+Both run on GitHub-hosted runners, on a public repository.
+
+| Check | Result |
+|---|---|
+| CI run [45238307689](https://github.com/rgomez31UAQ/vulnserver-lab/actions/runs/45238307689) | success |
+| `ci` → functional suite (`RUN_CRON_TEST=1 ./tests/test-container.sh`) | `SUMMARY\|PASS=80\|FAIL=0` inside the runner, 66 s |
+| `ci` → cloud tooling (`./tests/test-cloud.sh`) | 23/23 PASS |
+| Pages deploy [45238465319](https://github.com/rgomez31UAQ/vulnserver-lab/actions/runs/45238465319) | success; <https://rgomez31UAQ.github.io/vulnserver-lab/> returns 200, CSS 200 |
+| `cloud-init/user-data.yaml` rendered from the public repo URL | 1 950 bytes, valid YAML, tarball URL returns 200 |
+
+The first Pages run failed: the workflow triggered on the push that happened
+seconds before the Pages site was enabled through the API, so
+`actions/configure-pages` got a 404. Re-running after enabling Pages succeeded;
+the failure is left visible in the run history rather than deleted.
+
+The site is static and only presents the lab — GitHub Pages cannot host the
+vulnerable server, which still needs a VM with root, SSH, cron and Docker.
+
+Not verified: a real Hetzner deployment (no `HCLOUD_TOKEN` was available), and
+cloud-init actually executing this user-data at first boot.
+
+## 12. Conclusion
 
 The laboratory logic — accounts, flags, the three escalation paths, audit,
 hardening, reset and uninstall — is functionally verified in a clean Ubuntu 24.04
