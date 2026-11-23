@@ -221,17 +221,25 @@ LAB_NET_SUBNET=${LAB_NET_SUBNET}
 EOF
         chmod 0640 "$LAB_WEB_DIR/.env"
     else
-        sed -i "s/^JUICE_SHOP_PORT=.*/JUICE_SHOP_PORT=${JUICE_SHOP_PORT}/" "$LAB_WEB_DIR/.env"
+        # Keep the generated .env in sync with the current invocation, otherwise
+        # a later run with a tunnel bind address would silently keep 0.0.0.0.
+        sed -i -e "s/^JUICE_SHOP_PORT=.*/JUICE_SHOP_PORT=${JUICE_SHOP_PORT}/" \
+               -e "s/^LAB_BIND_ADDR=.*/LAB_BIND_ADDR=${LAB_BIND_ADDR}/" "$LAB_WEB_DIR/.env"
+        grep -q '^LAB_BIND_ADDR=' "$LAB_WEB_DIR/.env" \
+            || printf 'LAB_BIND_ADDR=%s\n' "$LAB_BIND_ADDR" >> "$LAB_WEB_DIR/.env"
     fi
 
     ( cd "$LAB_WEB_DIR" && run_cmd docker compose pull -q && run_cmd docker compose up -d ) \
         || die "Juice Shop failed to start (docker compose logs in ${LAB_WEB_DIR})"
     log_event "DOCKER_DEPLOY" "juice-shop" "-" "SUCCESS" "port=${JUICE_SHOP_PORT} image=${JUICE_SHOP_IMAGE}"
 
-    info "Waiting for Juice Shop to answer on http://127.0.0.1:${JUICE_SHOP_PORT}/"
+    # Probe the address the app is actually published on, not 127.0.0.1.
+    local probe_addr="$LAB_BIND_ADDR"
+    [[ "$probe_addr" == "0.0.0.0" || "$probe_addr" == "::" ]] && probe_addr="127.0.0.1"
+    info "Waiting for Juice Shop to answer on http://${probe_addr}:${JUICE_SHOP_PORT}/"
     local i
     for i in $(seq 1 30); do
-        if curl -fsS --max-time 3 "http://127.0.0.1:${JUICE_SHOP_PORT}/" >/dev/null 2>&1; then
+        if curl -fsS --max-time 3 "http://${probe_addr}:${JUICE_SHOP_PORT}/" >/dev/null 2>&1; then
             ok "Juice Shop is responding"; return 0
         fi
         sleep 2

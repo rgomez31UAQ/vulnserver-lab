@@ -155,6 +155,97 @@ If you install the lab before the tunnel, re-run
 
 Then verify from the VM: `curl -s -o /dev/null -w '%{http_code}\n' http://10.8.0.1:3000/`.
 
+### 5.1 One command (Hetzner or Vultr)
+
+`scripts/cloud/provision.sh` does sections 4–6 for you: resolves the Ubuntu
+24.04 image, registers your SSH key, creates a firewall, creates the VM, waits
+for SSH, uploads the project over SSH, runs `scripts/cloud/bootstrap-vm.sh`
+(tunnel first, lab second) and downloads the WireGuard client configs.
+
+```bash
+# Hetzner: Console -> Project -> Security -> API tokens (read/write)
+export HCLOUD_TOKEN=...
+./scripts/cloud/provision.sh --provider hetzner --name vulnserver-1
+
+# Vultr: Account -> API -> Personal Access Token (all permissions)
+export VULTR_API_KEY=...
+./scripts/cloud/provision.sh --provider vultr --name vulnserver-1
+```
+
+Before creating anything you can inspect the plan without credentials:
+
+```bash
+./scripts/cloud/provision.sh --provider hetzner --name vulnserver-1 --dry-run
+```
+
+The firewall it creates allows **UDP 51820 from anywhere** and **TCP 22 only
+from your current public IP** (`--admin-cidr` overrides it). Juice Shop and SSH
+are never published: both are reached through the tunnel at `10.8.0.1`.
+
+The VM is billable from creation to deletion. The script never destroys it
+silently, not even when the bootstrap fails, so you can read the log:
+
+```bash
+ssh root@<vm> tail -60 /var/log/vulnserver-bootstrap.log
+./scripts/cloud/provision.sh --provider hetzner --name vulnserver-1 --destroy
+```
+
+State lives in `provision/<provider>-<name>.env` (mode 0600, git-ignored) and
+client keys in `clients/` (git-ignored). `--no-bootstrap` stops after the VM is
+running; `--user-data FILE` passes cloud-init instead of the SSH upload.
+
+### 5.2 Unattended first boot with cloud-init
+
+If the project is reachable over HTTPS at boot, the VM can install itself with
+no SSH upload. Generate the user-data file and paste it into the provider form
+(Hetzner *Cloud config*, Vultr *Cloud-Init*, OCI *Initialization script*):
+
+```bash
+./scripts/cloud/make-cloud-init.sh \
+  --repo-url https://github.com/<you>/vulnserver-lab/archive/refs/heads/main.tar.gz \
+  --peer owner --out /tmp/vulnserver-user-data.yaml
+```
+
+Both a `.tar.gz` URL and a git URL work. The generated file is small (about
+2.5 KB) because it downloads the project at boot instead of embedding it —
+Hetzner caps `user_data` at **32 768 bytes**, so embedding a full repository is
+not an option. The script refuses to emit a file above that limit.
+
+> **A private repository is not usable by unattended cloud-init** unless the
+> URL carries a read-only token, and that token then sits in the instance
+> metadata where any root process (and the provider) can read it. For a private
+> repo use `provision.sh` (SSH upload) or clone over SSH after first boot; keep
+> cloud-init for public repositories.
+
+After the first boot:
+
+```bash
+ssh root@<vm> tail -60 /var/log/vulnserver-bootstrap.log
+scp root@<vm>:/etc/wireguard/clients/owner.conf .
+# import owner.conf, connect, then http://10.8.0.1:3000/ and ssh labuser@10.8.0.1
+```
+
+Note that cloud-init only runs once per instance. To re-run the bootstrap after
+editing the repo, `scp` the project again and execute
+`sudo ./scripts/cloud/bootstrap-vm.sh`; every step is idempotent.
+
+### 5.3 Publishing the project to GitHub
+
+The lab repository is safe to host as long as runtime artefacts stay out: the
+`.gitignore` already excludes `flags/`, `logs/`, `reports/`, `backups/`,
+`provision/`, `clients/`, `cloud-init/user-data.yaml` and `*.iso`. Check before
+the first push:
+
+```bash
+git status --short
+git ls-files | grep -E '(^|/)(flags|logs|reports|clients)/[^.]' || echo "clean"
+```
+
+Never commit generated peer configs, `.env` files or the instructor's flag
+values. A public repository gives you the cloud-init path above; a private one
+(the safer default for a lab) needs `provision.sh` or a per-repo read-only
+token.
+
 ## 6. WireGuard server configuration
 
 ### 6.1 Automated (recommended)

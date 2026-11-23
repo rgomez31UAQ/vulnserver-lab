@@ -51,7 +51,8 @@ if ! command -v wg >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then
     say "installing wireguard-tools and curl"
     apt-get update -qq
     DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-        wireguard-tools curl ca-certificates || fail "apt-get install failed"
+        wireguard-tools curl ca-certificates iproute2 iptables openssl \
+        || fail "apt-get install failed"
 fi
 
 # -----------------------------------------------------------------------------

@@ -7,8 +7,8 @@ simulated: every PASS below comes from a command whose output is stored in
 
 - Date of run: 2026-11-23
 - Result: **80 / 80 functional checks PASS, 0 FAIL**
-- Artifacts: `reports/test-matrix-20261123-110654.md`,
-  `reports/test-run-20261123-110654.log`
+- Artifacts: `reports/test-matrix-20261123-120100.md`,
+  `reports/test-run-20261123-120100.log`
 
 ## 1. Environment used for validation
 
@@ -211,7 +211,63 @@ Not verified here: a handshake between two real machines, the provider
 firewall, UFW rules (no ufw in the container), `systemctl enable wg-quick@wg0`,
 and `--publish-web` (no lab installed in the container).
 
-## 10. Conclusion
+## 10. Cloud provisioning and cloud-init (2026-11-23)
+
+Tested on the same host (Kali Rolling, Docker 28.5.2). No cloud account,
+credentials or VM was used, so this validates the tooling's logic, not the
+providers' behaviour.
+
+| Check | Result |
+|---|---|
+| `tests/test-cloud.sh` (mock Hetzner + Vultr API) | **23/23 PASS**, exit 0 |
+| Hetzner create | image, plan, SSH key, firewall and server requests issued with the expected bodies |
+| Hetzner firewall | `udp/51820` from `0.0.0.0/0` and `tcp/22` only from the operator `/32` |
+| Vultr create | `os_id` 24.04 x64, plan validated, `sshkey_id` + `firewall_group_id` attached |
+| Destroy (both) | server/instance and firewall deleted, state file removed, exit 0 |
+| Dry-run | prints the plan, sends no HTTP request, needs no token |
+| cloud-init rendering | valid YAML, ~2.5 KB, placeholders substituted, > 32 KiB refused, `http://` and shell metacharacters rejected |
+| `bootstrap-vm.sh` in `ubuntu:24.04` (`--cap-add NET_ADMIN`) | real `wg0` at `10.8.0.1/24`, `install.sh --profile container` completed, marker written, client config mode 0600 |
+| Bootstrap re-run | idempotent: existing tunnel and peer reused, exit 0 |
+
+Defects found and fixed while writing this:
+
+1. `api()` returned status 1 whenever the response had no body, so every
+   successful `DELETE` was reported as failed and `set -e` aborted the destroy.
+2. Vultr request bodies were built with `jq --argjson` for `k1`/`g1` style IDs;
+   jq exited with an error and an empty body was posted. IDs are now `--arg`
+   and converted only where the API expects numbers.
+3. `bootstrap-vm.sh` assumed `iproute2`/`iptables`/`openssl`; a minimal image
+   failed at `wg-quick`. They are now installed with `wireguard-tools`.
+4. The cloud-init template's own comments were being substituted by the
+   generator, corrupting the header of the rendered file.
+5. `install.sh` only updated `JUICE_SHOP_PORT` in the generated `.env`, so a
+   re-run with `LAB_BIND_ADDR=10.8.0.1` kept publishing on `0.0.0.0`. The bind
+   address is now rewritten and the health probe uses the real bind address.
+
+Not verified here (requires credentials and a real VM):
+
+- real `POST /servers` / `POST /instances` responses, quotas, image/plan names
+  and prices at the time of deployment;
+- the provider firewall actually dropping traffic (mock only records rules);
+- the SSH upload and `bootstrap-vm.sh` path against a real cloud image with
+  systemd, sshd, UFW, auditd and Docker;
+- cloud-init executing the user-data at first boot, and Hetzner's 32 KiB
+  acceptance of the generated file (size is checked locally);
+- `scp` of the client configs from a real server (`fetch_clients`).
+
+Reproduce:
+
+```bash
+./tests/test-cloud.sh
+
+docker run --rm --cap-add NET_ADMIN -v "$PWD":/src:ro ubuntu:24.04 bash -c '
+  cp -a /src /work && cd /work
+  LAB_DIR=/work PUBLIC_IP=203.0.113.10 PEER=owner \
+  LAB_INSTALL_ARGS="--profile container --install-deps --yes" \
+  ./scripts/cloud/bootstrap-vm.sh'
+```
+
+## 11. Conclusion
 
 The laboratory logic — accounts, flags, the three escalation paths, audit,
 hardening, reset and uninstall — is functionally verified in a clean Ubuntu 24.04

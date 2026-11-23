@@ -68,9 +68,11 @@ vulnserver/
 │   ├── scenarios/             # scenario-a.sh, scenario-b.sh, scenario-c.sh
 │   ├── flags/                 # flag generation and verification
 │   ├── monitoring/            # auditd rules, activity report
-│   └── remote/                # WireGuard access for cloud VMs
+│   ├── remote/                # WireGuard access for cloud VMs
+│   └── cloud/                 # provision.sh (Hetzner/Vultr), VM bootstrap, cloud-init
+├── cloud-init/                # user-data template for unattended first boot
 ├── web/docker-compose.yml     # OWASP Juice Shop
-├── tests/                     # container-based functional test suite
+├── tests/                     # container-based functional test suite (+ cloud mock)
 ├── flags/ logs/ backups/ reports/   # runtime (git-ignored)
 └── docs/                      # student, admin, hardening, cloud, instructor
 ```
